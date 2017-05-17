@@ -19,11 +19,13 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.databinding.BindingAdapter;
 import android.databinding.DataBindingUtil;
 import android.databinding.ObservableArrayList;
 import android.location.LocationManager;
+import android.net.ConnectivityManager;
 import android.os.Build;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
@@ -91,6 +93,10 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         mayRequestLocation();
+
+        IntentFilter intentFilter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
+        intentFilter.addAction(BleManager.ACTION_DATA_AVAILABLE);
+        this.registerReceiver(mGattUpdateReceiver, intentFilter);
 
     }
 
@@ -220,17 +226,11 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    // Handles various events fired by the Service.
-// ACTION_GATT_CONNECTED: connected to a GATT server.
-// ACTION_GATT_DISCONNECTED: disconnected from a GATT server.
-// ACTION_GATT_SERVICES_DISCOVERED: discovered GATT services.
-// ACTION_DATA_AVAILABLE: received data from the device. This can be a
-// result of read or notification operations.
     private final BroadcastReceiver mGattUpdateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             final String action = intent.getAction();
-            Log.i(TAG, "onReceive");
+
             if (BleManager.ACTION_GATT_CONNECTED.equals(action)) {
 //                mConnected = true;
 //                updateConnectionState(R.string.connected);
@@ -246,11 +246,10 @@ public class MainActivity extends AppCompatActivity {
                 //displayGattServices(mBluetoothLeService.getSupportedGattServices());
             } else if (BleManager.ACTION_DATA_AVAILABLE.equals(action)) {
 //                displayData(intent.getStringExtra(BluetoothLeService.EXTRA_DATA));
-               // Log.i("BroadcastReceiver", intent.getStringExtra(BleManager.EXTRA_DATA));
+                  Log.i("BroadcastReceiver", intent.getStringExtra(BleManager.EXTRA_DATA));
             }
         }
     };
-
 
 }
 

@@ -19,6 +19,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.icu.text.StringPrepParseException;
 import android.os.Build;
 import android.os.ParcelUuid;
 import android.util.Log;
@@ -227,7 +228,7 @@ public class BleManager {
         public void onCharacteristicChanged (BluetoothGatt gatt,
                                              BluetoothGattCharacteristic characteristic){
             Log.i("onCharacteristicChanged", characteristic.getStringValue(0));
-            
+
             broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
         }
     };
@@ -242,13 +243,14 @@ public class BleManager {
         final Intent intent = new Intent(action);
 
         final byte[] data = characteristic.getValue();
-            if (data != null && data.length > 0) {
-                final StringBuilder stringBuilder = new StringBuilder(data.length);
-                for(byte byteChar : data)
-                    stringBuilder.append(String.format("%02X ", byteChar));
-                intent.putExtra(EXTRA_DATA, new String(data) + "\n" +
-                        stringBuilder.toString());
-            }
+//            if (data != null && data.length > 0) {
+//                final StringBuilder stringBuilder = new StringBuilder(data.length);
+//                for(byte byteChar : data)
+//                    stringBuilder.append(String.format("%02X ", byteChar));
+//                intent.putExtra(EXTRA_DATA, new String(data) + "\n" +
+//                        stringBuilder.toString());
+//            }
+        intent.putExtra(EXTRA_DATA, new String(data));
 
         mContext.sendBroadcast(intent);
     }
