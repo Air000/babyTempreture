@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
@@ -14,13 +15,17 @@ import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.ParcelUuid;
 import android.util.Log;
 import android.os.Handler;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -44,6 +49,23 @@ public class BleManager {
     private List<ScanFilter> filters;
     public BluetoothGatt mGatt;
     public DevicesInfoList infos;
+    public BluetoothGattCharacteristic mReadCharacteristic;
+
+    private static final UUID CUSTOM_SERVICE_UUID  =UUID.fromString("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
+    private static final UUID CUSTOM_CHARATERISTIC_WRITE_UUID = UUID.fromString("6E400002-B5A3-F393-E0A9-E50E24DCCA9E");
+    private static final UUID CUSTOM_CHARATERISTIC_READ_UUID = UUID.fromString("6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
+    private static final UUID CLIENT_CHARACTERISTIC_CONFIG = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
+
+    public final static String ACTION_GATT_CONNECTED =
+            "com.example.bluetooth.le.ACTION_GATT_CONNECTED";
+    public final static String ACTION_GATT_DISCONNECTED =
+            "com.example.bluetooth.le.ACTION_GATT_DISCONNECTED";
+    public final static String ACTION_GATT_SERVICES_DISCOVERED =
+            "com.example.bluetooth.le.ACTION_GATT_SERVICES_DISCOVERED";
+    public final static String ACTION_DATA_AVAILABLE =
+            "com.example.bluetooth.le.ACTION_DATA_AVAILABLE";
+    public final static String EXTRA_DATA =
+            "com.example.bluetooth.le.EXTRA_DATA";
 
     private Context mContext;
 
@@ -65,6 +87,16 @@ public class BleManager {
         Log.i(TAG, "new BleManager Ok!");
         mBluetoothAdapter = bluetoothManager.getAdapter();
         mLEScanner = mBluetoothAdapter.getBluetoothLeScanner();
+        if (Build.VERSION.SDK_INT >= 21) {
+            settings = new ScanSettings.Builder()
+                    .setScanMode(ScanSettings.CALLBACK_TYPE_FIRST_MATCH)
+                    .build();
+            filters = new ArrayList<ScanFilter>();
+            //ScanFilter filter = new ScanFilter.Builder().setServiceUuid(ParcelUuid.fromString(CUSTOM_SERVICE_UUID.toString())).build();
+            ScanFilter filter = new ScanFilter.Builder().setDeviceName("BM02X-2E2C").build();
+            filters.add(filter);
+        }
+
 
     }
 
@@ -86,8 +118,8 @@ public class BleManager {
                 mBluetoothAdapter.startLeScan(mLeScanCallback);
             } else {
                 Log.i(TAG, "mLEScanner.startScan");
-                //mLEScanner.startScan(filters, settings, mScanCallback);
-                mLEScanner.startScan(mScanCallback);
+                mLEScanner.startScan(filters, settings, mScanCallback);
+                //mLEScanner.startScan(mScanCallback);
             }
         } else {
             if (Build.VERSION.SDK_INT < 21) {
@@ -109,7 +141,7 @@ public class BleManager {
             Log.i(TAG, infos.list+"");
             if(!infos.list.contains(device))
                 infos.add(device);
-            //connectToDevice(btDevice);
+            connectToDevice(btDevice);
         }
 
         @Override
@@ -173,8 +205,14 @@ public class BleManager {
         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
             List<BluetoothGattService> services = gatt.getServices();
             Log.i("onServicesDiscovered", services.toString());
-            gatt.readCharacteristic(services.get(1).getCharacteristics().get
-                    (0));
+
+            mReadCharacteristic = gatt.getService(CUSTOM_SERVICE_UUID).getCharacteristic(CUSTOM_CHARATERISTIC_READ_UUID);
+            //gatt.readCharacteristic(services.get(2).getCharacteristics().get(0));
+            gatt.setCharacteristicNotification(mReadCharacteristic, true);
+            BluetoothGattDescriptor descriptor = mReadCharacteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG);
+            descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+            gatt.writeDescriptor(descriptor);
+            gatt.readCharacteristic(mReadCharacteristic);
         }
 
         @Override
@@ -184,5 +222,34 @@ public class BleManager {
             Log.i("onCharacteristicRead", characteristic.toString());
             gatt.disconnect();
         }
+
+        @Override
+        public void onCharacteristicChanged (BluetoothGatt gatt,
+                                             BluetoothGattCharacteristic characteristic){
+            Log.i("onCharacteristicChanged", characteristic.getStringValue(0));
+            
+            broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
+        }
     };
+
+    private void broadcastUpdate(final String action) {
+        final Intent intent = new Intent(action);
+        mContext.sendBroadcast(intent);
+    }
+
+    private void broadcastUpdate(final String action,
+                                 final BluetoothGattCharacteristic characteristic) {
+        final Intent intent = new Intent(action);
+
+        final byte[] data = characteristic.getValue();
+            if (data != null && data.length > 0) {
+                final StringBuilder stringBuilder = new StringBuilder(data.length);
+                for(byte byteChar : data)
+                    stringBuilder.append(String.format("%02X ", byteChar));
+                intent.putExtra(EXTRA_DATA, new String(data) + "\n" +
+                        stringBuilder.toString());
+            }
+
+        mContext.sendBroadcast(intent);
+    }
 }
