@@ -37,7 +37,10 @@ import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.text.Layout;
 import android.util.Log;
+import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -46,6 +49,7 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.os.Handler;
+import android.view.ViewGroup.LayoutParams;
 
 import com.example.air.babytempreture.databinding.ActivityMainBinding;
 
@@ -55,33 +59,15 @@ import static android.graphics.Color.YELLOW;
 import java.util.ArrayList;
 import java.util.List;
 
-import lecho.lib.hellocharts.gesture.ContainerScrollType;
-import lecho.lib.hellocharts.gesture.ZoomType;
-import lecho.lib.hellocharts.model.Axis;
-import lecho.lib.hellocharts.model.Line;
-import lecho.lib.hellocharts.model.LineChartData;
-import lecho.lib.hellocharts.model.PointValue;
-import lecho.lib.hellocharts.model.ValueShape;
-import lecho.lib.hellocharts.model.Viewport;
-import lecho.lib.hellocharts.view.LineChartView;
-
 public class MainActivity extends AppCompatActivity {
 
     private BleManager bleManager;
 
     private Button toggleBtn;
+    private Button ledBtn;
     private TextView powerLevelTxt;
-    private LineChartData lineChartData;
-    private LineChartView lineChartView;
-    private LinearLayout lineChartContainer;
+    private LinearLayout mainContainer;
 
-    private List<Line> linesList;
-    private List<PointValue> pointValueList;
-    private List<PointValue>points;
-    private int position = 0;
-    private Axis axisY;
-    private Axis axisX;
-    private Vibrator vibrator;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -113,12 +99,56 @@ public class MainActivity extends AppCompatActivity {
         bleManager.infos = new DevicesInfoList();
         binding.setInfos(bleManager.infos);
 
-
+        mainContainer = (LinearLayout) findViewById(R.id.main_container);
         toggleBtn = (Button) findViewById(R.id.scan_btn);
+        ledBtn = (Button) findViewById(R.id.led_on);
         powerLevelTxt = (TextView) findViewById(R.id.power_level);
-        lineChartContainer = (LinearLayout) findViewById(R.id.lineChartContainer);
 
-        vibrator = (Vibrator)this.getSystemService(Context.VIBRATOR_SERVICE);
+
+        for (int j=0; j<3; j++) {
+            LinearLayout linLayout = new LinearLayout(this);
+            linLayout.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams linLayoutParam = new LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
+            linLayoutParam.gravity=Gravity.CENTER;
+            linLayout.setPadding(0,30,0,0);
+            for (int i = 0; i < 3; i++) {
+                LayoutParams lpView = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
+                final Button btn = new Button(this);
+                btn.setLayoutParams(lpView);
+                btn.setText("ON/OFF");
+                btn.setTextColor(getResources().getColor(R.color.white));
+                btn.setGravity(Gravity.CENTER);
+                btn.setId(j*3+i);
+                switch (i) {
+                    case 0:
+                        btn.setBackgroundColor(getResources().getColor(R.color.red));
+                        break;
+                    case 1:
+                        btn.setBackgroundColor(getResources().getColor(R.color.green));
+                        break;
+                    case 2:
+                        btn.setBackgroundColor(getResources().getColor(R.color.blue));
+                        break;
+                }
+
+                btn.setOnClickListener(new View.OnClickListener(){
+                    public void onClick(View v) {
+                        Log.i("ledBtn onClick", "device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
+                        //bleManager.sendCommand("device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
+                        byte[] data=new byte[5];
+                        data[0]=0x00;
+                        data[1]=(byte)btn.getId();
+                        data[2]=0x00;
+                        data[3]=0x01;
+                        data[4]=0x00;
+
+                        bleManager.sendCommand("device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
+                    }
+                });
+                linLayout.addView(btn,lpView);
+            }
+            mainContainer.addView(linLayout,linLayoutParam);
+        }
 
         toggleBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
@@ -133,6 +163,16 @@ public class MainActivity extends AppCompatActivity {
 
             }
         });
+
+        ledBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                Log.i("setOnClickListener", "lenOn");
+                bleManager.sendCommand("LED_ON");
+            }
+        });
+
+        LayoutInflater inflater = LayoutInflater.from(this);
+
         mayRequestLocation();
 
         IntentFilter intentFilter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
@@ -144,7 +184,6 @@ public class MainActivity extends AppCompatActivity {
 
         this.registerReceiver(mGattUpdateReceiver, intentFilter);
 
-        initChartView();
     }
 
     @Override
@@ -305,103 +344,12 @@ public class MainActivity extends AppCompatActivity {
                 //displayGattServices(mBluetoothLeService.getSupportedGattServices());
                 Log.i("Receive Broadcast", "ACTION_GATT_SERVICES_DISCOVERED");
             } else if (BleManager.ACTION_DATA_AVAILABLE.equals(action)) {
-                displayData(intent.getStringExtra(BleManager.EXTRA_DATA));
+                //displayData(intent.getStringExtra(BleManager.EXTRA_DATA));
                 Log.i("BroadcastReceiver", intent.getStringExtra(BleManager.EXTRA_DATA));
 
             }
         }
     };
-
-    private void displayData(String data) {
-        //float tempreture = Float.parseFloat(data)/10;
-        String[] dataArray = data.split(",");
-        float tempreture = Float.parseFloat(dataArray[0])/10;
-        float powerLevel = Float.parseFloat(dataArray[1]);
-        Log.i("RSSI", bleManager.btDevice.EXTRA_RSSI);
-        powerLevelTxt.setText(Float.toString(powerLevel));
-        if(powerLevel<1000)powerLevelTxt.setBackgroundColor(Color.RED);
-        else powerLevelTxt.setBackgroundColor(Color.GREEN);
-
-        if(tempreture>30){
-            vibrator.vibrate(new long[]{300,500,300,500},-1);
-            lineChartContainer.setBackgroundColor(Color.RED);
-        }else {
-            lineChartContainer.setBackgroundColor(getResources().getColor(R.color.lightpink));
-        }
-
-        PointValue point = new PointValue(pointValueList.size()*5, tempreture);
-        point.setLabel(Float.toString(tempreture));
-
-        pointValueList.add(point);
-        float x = point.getX();
-        Line line=new Line(pointValueList);
-        line.setColor(Color.GRAY);
-        line.setHasLabels(true);
-        line.setShape(ValueShape.CIRCLE);
-        line.setCubic(false);//曲线是否平滑，即是曲线还是折线
-
-        linesList.add(line);
-        lineChartData=initDatas(linesList);
-        lineChartView.setZoomEnabled(true);//设置是否支持缩放
-        lineChartView.setInteractive(true);//设置图表是否可以与用户互动
-        lineChartView.setContainerScrollEnabled(true, ContainerScrollType.HORIZONTAL);
-        lineChartView.setLineChartData(lineChartData);
-
-        Viewport port;
-        if(x > 30){
-            port = initViewPort(x-30,x);
-        }
-        else {
-            port = initViewPort(0,30);
-        }
-
-        lineChartView.setMaximumViewport(port);
-        lineChartView.setCurrentViewport(port);
-    }
-
-    private void initChartView() {
-        lineChartView = (LineChartView) findViewById(R.id.chart);
-        pointValueList = new ArrayList<>();
-        linesList = new ArrayList<>();
-
-        //初始化坐标轴
-        axisY = new Axis();
-        axisX = new Axis();
-        //添加坐标轴的名称
-        axisY.setName("Tempreture(℃)");
-        axisX.setName("Time(second)");
-        axisY.setTextColor(Color.parseColor("#ffffff"));
-        axisX.setTextColor(Color.parseColor("#ffffff"));
-
-        lineChartData = initDatas(null);
-        lineChartView.setLineChartData(lineChartData);
-        Viewport port = initViewPort(0,30);
-        lineChartView.setCurrentViewportWithAnimation(port);
-        lineChartView.setInteractive(false);
-        lineChartView.setScrollEnabled(false);
-        lineChartView.setValueTouchEnabled(false);
-        lineChartView.setFocusableInTouchMode(false);
-        lineChartView.setViewportCalculationEnabled(false);
-        lineChartView.setContainerScrollEnabled(true, ContainerScrollType.HORIZONTAL);
-        lineChartView.startDataAnimation();
-
-    }
-
-    private Viewport initViewPort(float left,float right) {
-        Viewport port = new Viewport();
-        port.top = 50;
-        port.bottom = 20;
-        port.left = left;
-        port.right = right;
-        return port;
-    }
-
-    private LineChartData initDatas(List<Line> lines) {
-        LineChartData data = new LineChartData(lines);
-        data.setAxisYLeft(axisY);
-        data.setAxisXBottom(axisX);
-        return data;
-    }
 
 }
 

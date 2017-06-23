@@ -53,12 +53,16 @@ public class BleManager {
     public BluetoothGatt mGatt;
     public BluetoothDevice btDevice;
     public DevicesInfoList infos;
-    public BluetoothGattCharacteristic mReadCharacteristic;
+    public BluetoothGattCharacteristic mReadWriteCharacteristic;
 
     private static final UUID CUSTOM_SERVICE_UUID  =UUID.fromString("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
     private static final UUID CUSTOM_CHARATERISTIC_WRITE_UUID = UUID.fromString("6E400002-B5A3-F393-E0A9-E50E24DCCA9E");
-    private static final UUID CUSTOM_CHARATERISTIC_READ_UUID = UUID.fromString("6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
+    //private static final UUID CUSTOM_CHARATERISTIC_READ_UUID = UUID.fromString("6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
     private static final UUID CLIENT_CHARACTERISTIC_CONFIG = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
+
+    private static final UUID NRF_CUSTOM_SERVICE_UUID  =UUID.fromString("0000fee4-0000-1000-8000-00805f9b34fb");
+    private static final UUID NRF_CUSTOM_CHARATERISTIC_READ_WRITE_UUID  =UUID.fromString("2a1e0005-fd51-d882-8ba8-b98c0000cd1e");
+    private static final UUID NRF_CLIENT_CHARACTERISTIC_CONFIG = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
 
     public final static String ACTION_GATT_CONNECTED =
             "com.example.bluetooth.le.ACTION_GATT_CONNECTED";
@@ -97,7 +101,8 @@ public class BleManager {
                     .build();
             filters = new ArrayList<ScanFilter>();
             //ScanFilter filter = new ScanFilter.Builder().setServiceUuid(ParcelUuid.fromString(CUSTOM_SERVICE_UUID.toString())).build();
-            ScanFilter filter = new ScanFilter.Builder().setDeviceName("AVNET Smart Thermometer").build();
+            //ScanFilter filter = new ScanFilter.Builder().setDeviceName("AVNET Smart Thermometer").build();
+            ScanFilter filter = new ScanFilter.Builder().setDeviceName("rbc_mesh #57055").build();
             filters.add(filter);
         }
 
@@ -195,6 +200,21 @@ public class BleManager {
         }
         infos.deleteAll();
     }
+
+    public void sendCommand(String cmd) {
+        if(mGatt != null) {
+            mReadWriteCharacteristic.setValue(cmd);
+            mGatt.writeCharacteristic(mReadWriteCharacteristic);
+        }
+    }
+
+    public void sendCommand(byte[] cmd) {
+        if(mGatt != null) {
+            mReadWriteCharacteristic.setValue(cmd);
+            mGatt.writeCharacteristic(mReadWriteCharacteristic);
+        }
+    }
+
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
         @Override
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
@@ -222,14 +242,26 @@ public class BleManager {
             List<BluetoothGattService> services = gatt.getServices();
             Log.i("onServicesDiscovered", services.toString());
             broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED);
-            mReadCharacteristic = gatt.getService(CUSTOM_SERVICE_UUID).getCharacteristic(CUSTOM_CHARATERISTIC_READ_UUID);
+            mReadWriteCharacteristic = gatt.getService(NRF_CUSTOM_SERVICE_UUID).getCharacteristic(NRF_CUSTOM_CHARATERISTIC_READ_WRITE_UUID);
             //gatt.readCharacteristic(services.get(2).getCharacteristics().get(0));
-            gatt.setCharacteristicNotification(mReadCharacteristic, true);
-            BluetoothGattDescriptor descriptor = mReadCharacteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG);
+            gatt.setCharacteristicNotification(mReadWriteCharacteristic, true);
+
+            BluetoothGattDescriptor descriptor = mReadWriteCharacteristic.getDescriptor(NRF_CLIENT_CHARACTERISTIC_CONFIG);
             descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
             gatt.writeDescriptor(descriptor);
-            gatt.readCharacteristic(mReadCharacteristic);
+            //gatt.readCharacteristic(mReadWriteCharacteristic);
         }
+
+        @Override
+        public void onDescriptorWrite (BluetoothGatt gatt,
+                                       BluetoothGattDescriptor descriptor,
+                                       int status) {
+            if(status==BluetoothGatt.GATT_SUCCESS) {
+                Log.i("onDescriptorWrite", "Success!");
+
+            }
+        }
+
 
         @Override
         public void onCharacteristicRead(BluetoothGatt gatt,
@@ -260,16 +292,19 @@ public class BleManager {
                                  final BluetoothGattCharacteristic characteristic) {
         final Intent intent = new Intent(action);
 
-        if(characteristic!=null) {
-            final byte[] data = characteristic.getValue();
-            final byte[] temp = new byte[3];
-            temp[0]=data[0];
-            temp[1]=data[1];
-            temp[2]=data[2];
-            //intent.putExtra(EXTRA_DATA, new String(temp));
-            intent.putExtra(EXTRA_DATA, new String(data));
-
-        }
+        String data = characteristic.getStringValue(0);
+        Log.i("broadcastUpdate", data);
+        intent.putExtra(EXTRA_DATA, data);
+//        if(characteristic!=null) {
+//            final byte[] data = characteristic.getValue();
+//            final byte[] temp = new byte[3];
+//            temp[0]=data[0];
+//            temp[1]=data[1];
+//            temp[2]=data[2];
+//            //intent.putExtra(EXTRA_DATA, new String(temp));
+//            intent.putExtra(EXTRA_DATA, new String(data));
+//
+//        }
         mContext.sendBroadcast(intent);
     }
 }
