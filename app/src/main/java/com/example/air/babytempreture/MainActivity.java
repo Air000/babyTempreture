@@ -24,9 +24,11 @@ import android.content.pm.PackageManager;
 import android.databinding.BindingAdapter;
 import android.databinding.DataBindingUtil;
 import android.databinding.ObservableArrayList;
+import android.graphics.Color;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.os.Build;
+import android.os.Vibrator;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
@@ -38,21 +40,48 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.ListAdapter;
 import android.widget.ListView;
+import android.widget.TextView;
 import android.widget.Toast;
 import android.os.Handler;
 
 import com.example.air.babytempreture.databinding.ActivityMainBinding;
 
 import static android.content.ContentValues.TAG;
+import static android.graphics.Color.YELLOW;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import lecho.lib.hellocharts.gesture.ContainerScrollType;
+import lecho.lib.hellocharts.gesture.ZoomType;
+import lecho.lib.hellocharts.model.Axis;
+import lecho.lib.hellocharts.model.Line;
+import lecho.lib.hellocharts.model.LineChartData;
+import lecho.lib.hellocharts.model.PointValue;
+import lecho.lib.hellocharts.model.ValueShape;
+import lecho.lib.hellocharts.model.Viewport;
+import lecho.lib.hellocharts.view.LineChartView;
+
 public class MainActivity extends AppCompatActivity {
 
     private BleManager bleManager;
+
+    private Button toggleBtn;
+    private TextView powerLevelTxt;
+    private LineChartData lineChartData;
+    private LineChartView lineChartView;
+    private LinearLayout lineChartContainer;
+
+    private List<Line> linesList;
+    private List<PointValue> pointValueList;
+    private List<PointValue>points;
+    private int position = 0;
+    private Axis axisY;
+    private Axis axisX;
+    private Vibrator vibrator;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -83,12 +112,24 @@ public class MainActivity extends AppCompatActivity {
 
         bleManager.infos = new DevicesInfoList();
         binding.setInfos(bleManager.infos);
-        //mHandler = new Handler();
 
-        Button scanBtn = (Button) findViewById(R.id.scan_btn);
-        scanBtn.setOnClickListener(new View.OnClickListener() {
+
+        toggleBtn = (Button) findViewById(R.id.scan_btn);
+        powerLevelTxt = (TextView) findViewById(R.id.power_level);
+        lineChartContainer = (LinearLayout) findViewById(R.id.lineChartContainer);
+
+        vibrator = (Vibrator)this.getSystemService(Context.VIBRATOR_SERVICE);
+
+        toggleBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                bleManager.scanLeDevice(true);
+                Log.i("button text", toggleBtn.getText().toString());
+                if(toggleBtn.getText().toString().equals("CONNECT")) {
+                    Log.i("equals(\"CONNECT\")", "true");
+                    bleManager.scanLeDevice(true);
+                    toggleBtn.setText("SCANNING...");
+                    toggleBtn.setEnabled(false);
+
+                }else bleManager.disconnectToDevice();
 
             }
         });
@@ -96,8 +137,14 @@ public class MainActivity extends AppCompatActivity {
 
         IntentFilter intentFilter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
         intentFilter.addAction(BleManager.ACTION_DATA_AVAILABLE);
+        intentFilter.addAction(BleManager.ACTION_GATT_CONNECTED);
+        intentFilter.addAction(BleManager.ACTION_GATT_DISCONNECTED);
+        intentFilter.addAction(BleManager.ACTION_GATT_SERVICES_DISCOVERED);
+        intentFilter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
+
         this.registerReceiver(mGattUpdateReceiver, intentFilter);
 
+        initChartView();
     }
 
     @Override
@@ -230,26 +277,131 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
             final String action = intent.getAction();
-
+            Log.i("BroadCast_onReceive", action);
             if (BleManager.ACTION_GATT_CONNECTED.equals(action)) {
 //                mConnected = true;
 //                updateConnectionState(R.string.connected);
 //                invalidateOptionsMenu();
+                Log.i("Receive Broadcast", "ACTION_GATT_CONNECTED");
+                if(!toggleBtn.getText().toString().equals("DISCONNECT")){
+                    toggleBtn.setText("DISCONNECT");
+                    toggleBtn.setEnabled(true);
+                }
             } else if (BleManager.ACTION_GATT_DISCONNECTED.equals(action)) {
 //                mConnected = false;
 //                updateConnectionState(R.string.disconnected);
 //                invalidateOptionsMenu();
 //                clearUI();
+                Log.i("Receive Broadcast", "ACTION_GATT_DISCONNECTED");
+                if(!toggleBtn.getText().toString().equals("CONNECT")){
+                    toggleBtn.setText("CONNECT");
+                    toggleBtn.setEnabled(true);
+                    bleManager.infos.deleteAll();
+                }
+                bleManager.mGatt = null;
             } else if (BleManager.ACTION_GATT_SERVICES_DISCOVERED.equals(action)) {
                 // Show all the supported services and characteristics on the
                 // user interface.
                 //displayGattServices(mBluetoothLeService.getSupportedGattServices());
+                Log.i("Receive Broadcast", "ACTION_GATT_SERVICES_DISCOVERED");
             } else if (BleManager.ACTION_DATA_AVAILABLE.equals(action)) {
-//                displayData(intent.getStringExtra(BluetoothLeService.EXTRA_DATA));
-                  Log.i("BroadcastReceiver", intent.getStringExtra(BleManager.EXTRA_DATA));
+                displayData(intent.getStringExtra(BleManager.EXTRA_DATA));
+                Log.i("BroadcastReceiver", intent.getStringExtra(BleManager.EXTRA_DATA));
+
             }
         }
     };
+
+    private void displayData(String data) {
+        //float tempreture = Float.parseFloat(data)/10;
+        String[] dataArray = data.split(",");
+        float tempreture = Float.parseFloat(dataArray[0])/10;
+        float powerLevel = Float.parseFloat(dataArray[1]);
+        Log.i("RSSI", bleManager.btDevice.EXTRA_RSSI);
+        powerLevelTxt.setText(Float.toString(powerLevel));
+        if(powerLevel<1000)powerLevelTxt.setBackgroundColor(Color.RED);
+        else powerLevelTxt.setBackgroundColor(Color.GREEN);
+
+        if(tempreture>30){
+            vibrator.vibrate(new long[]{300,500,300,500},-1);
+            lineChartContainer.setBackgroundColor(Color.RED);
+        }else {
+            lineChartContainer.setBackgroundColor(getResources().getColor(R.color.lightpink));
+        }
+
+        PointValue point = new PointValue(pointValueList.size()*5, tempreture);
+        point.setLabel(Float.toString(tempreture));
+
+        pointValueList.add(point);
+        float x = point.getX();
+        Line line=new Line(pointValueList);
+        line.setColor(Color.GRAY);
+        line.setHasLabels(true);
+        line.setShape(ValueShape.CIRCLE);
+        line.setCubic(false);//曲线是否平滑，即是曲线还是折线
+
+        linesList.add(line);
+        lineChartData=initDatas(linesList);
+        lineChartView.setZoomEnabled(true);//设置是否支持缩放
+        lineChartView.setInteractive(true);//设置图表是否可以与用户互动
+        lineChartView.setContainerScrollEnabled(true, ContainerScrollType.HORIZONTAL);
+        lineChartView.setLineChartData(lineChartData);
+
+        Viewport port;
+        if(x > 30){
+            port = initViewPort(x-30,x);
+        }
+        else {
+            port = initViewPort(0,30);
+        }
+
+        lineChartView.setMaximumViewport(port);
+        lineChartView.setCurrentViewport(port);
+    }
+
+    private void initChartView() {
+        lineChartView = (LineChartView) findViewById(R.id.chart);
+        pointValueList = new ArrayList<>();
+        linesList = new ArrayList<>();
+
+        //初始化坐标轴
+        axisY = new Axis();
+        axisX = new Axis();
+        //添加坐标轴的名称
+        axisY.setName("Tempreture(℃)");
+        axisX.setName("Time(second)");
+        axisY.setTextColor(Color.parseColor("#ffffff"));
+        axisX.setTextColor(Color.parseColor("#ffffff"));
+
+        lineChartData = initDatas(null);
+        lineChartView.setLineChartData(lineChartData);
+        Viewport port = initViewPort(0,30);
+        lineChartView.setCurrentViewportWithAnimation(port);
+        lineChartView.setInteractive(false);
+        lineChartView.setScrollEnabled(false);
+        lineChartView.setValueTouchEnabled(false);
+        lineChartView.setFocusableInTouchMode(false);
+        lineChartView.setViewportCalculationEnabled(false);
+        lineChartView.setContainerScrollEnabled(true, ContainerScrollType.HORIZONTAL);
+        lineChartView.startDataAnimation();
+
+    }
+
+    private Viewport initViewPort(float left,float right) {
+        Viewport port = new Viewport();
+        port.top = 50;
+        port.bottom = 20;
+        port.left = left;
+        port.right = right;
+        return port;
+    }
+
+    private LineChartData initDatas(List<Line> lines) {
+        LineChartData data = new LineChartData(lines);
+        data.setAxisYLeft(axisY);
+        data.setAxisXBottom(axisX);
+        return data;
+    }
 
 }
 

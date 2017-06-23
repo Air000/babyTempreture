@@ -30,6 +30,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static android.R.attr.action;
+import static android.R.attr.data;
 import static android.R.attr.duration;
 import static android.content.ContentValues.TAG;
 import static android.icu.lang.UCharacter.GraphemeClusterBreak.L;
@@ -49,6 +51,7 @@ public class BleManager {
     private ScanSettings settings;
     private List<ScanFilter> filters;
     public BluetoothGatt mGatt;
+    public BluetoothDevice btDevice;
     public DevicesInfoList infos;
     public BluetoothGattCharacteristic mReadCharacteristic;
 
@@ -94,7 +97,7 @@ public class BleManager {
                     .build();
             filters = new ArrayList<ScanFilter>();
             //ScanFilter filter = new ScanFilter.Builder().setServiceUuid(ParcelUuid.fromString(CUSTOM_SERVICE_UUID.toString())).build();
-            ScanFilter filter = new ScanFilter.Builder().setDeviceName("BM02X-2E2C").build();
+            ScanFilter filter = new ScanFilter.Builder().setDeviceName("AVNET Smart Thermometer").build();
             filters.add(filter);
         }
 
@@ -137,7 +140,7 @@ public class BleManager {
         public void onScanResult(int callbackType, ScanResult result) {
             Log.i("callbackType", String.valueOf(callbackType));
             Log.i("result", result.toString());
-            BluetoothDevice btDevice = result.getDevice();
+            btDevice = result.getDevice();
             DeviceInfo device = new DeviceInfo(btDevice);
             Log.i(TAG, infos.list+"");
             if(!infos.list.contains(device))
@@ -178,12 +181,20 @@ public class BleManager {
 
 
     public void connectToDevice(BluetoothDevice device) {
+        Log.i("connectToDevice", "true");
         if (mGatt == null) {
             mGatt = device.connectGatt(mContext, false, gattCallback);
             scanLeDevice(false);// will stop after first device detection
         }
     }
 
+    public void disconnectToDevice() {
+        if(mGatt != null){
+            mGatt.disconnect();
+
+        }
+        infos.deleteAll();
+    }
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
         @Override
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
@@ -191,10 +202,14 @@ public class BleManager {
             switch (newState) {
                 case BluetoothProfile.STATE_CONNECTED:
                     Log.i("gattCallback", "STATE_CONNECTED");
+                    broadcastUpdate(ACTION_GATT_CONNECTED);
+
                     gatt.discoverServices();
+
                     break;
                 case BluetoothProfile.STATE_DISCONNECTED:
                     Log.e("gattCallback", "STATE_DISCONNECTED");
+                    broadcastUpdate(ACTION_GATT_DISCONNECTED);
                     break;
                 default:
                     Log.e("gattCallback", "STATE_OTHER");
@@ -206,7 +221,7 @@ public class BleManager {
         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
             List<BluetoothGattService> services = gatt.getServices();
             Log.i("onServicesDiscovered", services.toString());
-
+            broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED);
             mReadCharacteristic = gatt.getService(CUSTOM_SERVICE_UUID).getCharacteristic(CUSTOM_CHARATERISTIC_READ_UUID);
             //gatt.readCharacteristic(services.get(2).getCharacteristics().get(0));
             gatt.setCharacteristicNotification(mReadCharacteristic, true);
@@ -234,7 +249,10 @@ public class BleManager {
     };
 
     private void broadcastUpdate(final String action) {
+        Log.i("broadcastUpdate", action);
         final Intent intent = new Intent(action);
+        String data = "";
+        intent.putExtra(EXTRA_DATA,data);
         mContext.sendBroadcast(intent);
     }
 
@@ -242,16 +260,16 @@ public class BleManager {
                                  final BluetoothGattCharacteristic characteristic) {
         final Intent intent = new Intent(action);
 
-        final byte[] data = characteristic.getValue();
-//            if (data != null && data.length > 0) {
-//                final StringBuilder stringBuilder = new StringBuilder(data.length);
-//                for(byte byteChar : data)
-//                    stringBuilder.append(String.format("%02X ", byteChar));
-//                intent.putExtra(EXTRA_DATA, new String(data) + "\n" +
-//                        stringBuilder.toString());
-//            }
-        intent.putExtra(EXTRA_DATA, new String(data));
+        if(characteristic!=null) {
+            final byte[] data = characteristic.getValue();
+            final byte[] temp = new byte[3];
+            temp[0]=data[0];
+            temp[1]=data[1];
+            temp[2]=data[2];
+            //intent.putExtra(EXTRA_DATA, new String(temp));
+            intent.putExtra(EXTRA_DATA, new String(data));
 
+        }
         mContext.sendBroadcast(intent);
     }
 }

@@ -17,4 +17,5 @@ public class DevicesInfoList {
     public void add(DeviceInfo info) {
         list.add(info);
     }
+    public void deleteAll(){list.clear();}
 }
