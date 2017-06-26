@@ -49,10 +49,11 @@
             bind:items="@{infos.list}"/>
 
         <Button
-        android:id="@+id/led_on"
-        android:text="len on"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+            android:id="@+id/led_on"
+            android:text="len on"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="invisible"
         />
         <!--<LinearLayout-->
             <!--android:id="@+id/device1"-->

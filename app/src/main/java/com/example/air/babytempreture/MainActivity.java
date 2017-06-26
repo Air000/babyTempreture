@@ -25,6 +25,8 @@ import android.databinding.BindingAdapter;
 import android.databinding.DataBindingUtil;
 import android.databinding.ObservableArrayList;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.os.Build;
@@ -43,6 +45,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.ListAdapter;
 import android.widget.ListView;
@@ -50,6 +53,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.os.Handler;
 import android.view.ViewGroup.LayoutParams;
+import android.widget.ToggleButton;
 
 import com.example.air.babytempreture.databinding.ActivityMainBinding;
 
@@ -57,13 +61,14 @@ import static android.content.ContentValues.TAG;
 import static android.graphics.Color.YELLOW;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
     private BleManager bleManager;
 
-    private Button toggleBtn;
+    private Button connectBtn;
     private Button ledBtn;
     private TextView powerLevelTxt;
     private LinearLayout mainContainer;
@@ -100,7 +105,7 @@ public class MainActivity extends AppCompatActivity {
         binding.setInfos(bleManager.infos);
 
         mainContainer = (LinearLayout) findViewById(R.id.main_container);
-        toggleBtn = (Button) findViewById(R.id.scan_btn);
+        connectBtn = (Button) findViewById(R.id.scan_btn);
         ledBtn = (Button) findViewById(R.id.led_on);
         powerLevelTxt = (TextView) findViewById(R.id.power_level);
 
@@ -111,11 +116,19 @@ public class MainActivity extends AppCompatActivity {
             LinearLayout.LayoutParams linLayoutParam = new LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
             linLayoutParam.gravity=Gravity.CENTER;
             linLayout.setPadding(0,30,0,0);
+
+            final TextView deviceIdText = new TextView(this);
+            deviceIdText.setText("No."+j+" ");
+            deviceIdText.setTextColor(getResources().getColor(R.color.soft_opaque));
+            linLayout.addView(deviceIdText);
             for (int i = 0; i < 3; i++) {
                 LayoutParams lpView = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-                final Button btn = new Button(this);
+
+                final ToggleButton btn = new ToggleButton(this);
                 btn.setLayoutParams(lpView);
-                btn.setText("ON/OFF");
+                btn.setText("OFF");
+                btn.setTextOn("ON");
+                btn.setTextOff("OFF");
                 btn.setTextColor(getResources().getColor(R.color.white));
                 btn.setGravity(Gravity.CENTER);
                 btn.setId(j*3+i);
@@ -124,25 +137,45 @@ public class MainActivity extends AppCompatActivity {
                         btn.setBackgroundColor(getResources().getColor(R.color.red));
                         break;
                     case 1:
-                        btn.setBackgroundColor(getResources().getColor(R.color.green));
+                        btn.setBackgroundColor(getResources().getColor(R.color.mediumspringgreen));
                         break;
                     case 2:
-                        btn.setBackgroundColor(getResources().getColor(R.color.blue));
+                        btn.setBackgroundColor(getResources().getColor(R.color.dodgerblue));
                         break;
                 }
 
-                btn.setOnClickListener(new View.OnClickListener(){
-                    public void onClick(View v) {
-                        Log.i("ledBtn onClick", "device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
+//                btn.setOnClickListener(new View.OnClickListener(){
+//                    public void onClick(View v) {
+//                        Log.i("ledBtn onClick", "device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
+//                        //bleManager.sendCommand("device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
+//                        byte[] data=new byte[5];
+//                        data[0]=0x00;
+//                        data[1]=(byte)btn.getId();
+//                        data[2]=0x00;
+//                        data[3]=0x01;
+//                        data[4]=0x00;
+//
+//                        bleManager.sendCommand("device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
+//                    }
+//                });
+                btn.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                        Log.i("ledBtn onClick", "device: "+ btn.getId()+ ",color:" + btn.getBackground());
                         //bleManager.sendCommand("device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
                         byte[] data=new byte[5];
                         data[0]=0x00;
                         data[1]=(byte)btn.getId();
                         data[2]=0x00;
-                        data[3]=0x01;
-                        data[4]=0x00;
-
-                        bleManager.sendCommand("device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
+                        if (isChecked) {
+                            // The toggle is enabled
+                            data[3]=0x01;
+                            data[4]=0x00;
+                        } else {
+                            // The toggle is disabled
+                            data[3]=0x00;
+                            data[4]=0x00;
+                        }
+                        bleManager.sendCommand(data);
                     }
                 });
                 linLayout.addView(btn,lpView);
@@ -150,14 +183,14 @@ public class MainActivity extends AppCompatActivity {
             mainContainer.addView(linLayout,linLayoutParam);
         }
 
-        toggleBtn.setOnClickListener(new View.OnClickListener() {
+        connectBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                Log.i("button text", toggleBtn.getText().toString());
-                if(toggleBtn.getText().toString().equals("CONNECT")) {
+                Log.i("button text", connectBtn.getText().toString());
+                if(connectBtn.getText().toString().equals("CONNECT")) {
                     Log.i("equals(\"CONNECT\")", "true");
                     bleManager.scanLeDevice(true);
-                    toggleBtn.setText("SCANNING...");
-                    toggleBtn.setEnabled(false);
+                    connectBtn.setText("SCANNING...");
+                    connectBtn.setEnabled(false);
 
                 }else bleManager.disconnectToDevice();
 
@@ -192,16 +225,30 @@ public class MainActivity extends AppCompatActivity {
         if (bleManager.mBluetoothAdapter != null && bleManager.mBluetoothAdapter.isEnabled()) {
             bleManager.scanLeDevice(false);
         }
+        this.unregisterReceiver(mGattUpdateReceiver);
     }
 
     @Override
-    protected void onDestroy() {
+    protected void onStop() {
+        super.onStop();
+        Log.w(TAG, "App stopped");
         if (bleManager.mGatt == null) {
             return;
         }
         bleManager.mGatt.close();
         bleManager.mGatt = null;
+
+    }
+
+    @Override
+    protected void onDestroy() {
         super.onDestroy();
+        Log.w(TAG, "App destroy");
+        if (bleManager.mGatt == null) {
+            return;
+        }
+        bleManager.mGatt.close();
+        bleManager.mGatt = null;
     }
 
     @Override
@@ -322,9 +369,9 @@ public class MainActivity extends AppCompatActivity {
 //                updateConnectionState(R.string.connected);
 //                invalidateOptionsMenu();
                 Log.i("Receive Broadcast", "ACTION_GATT_CONNECTED");
-                if(!toggleBtn.getText().toString().equals("DISCONNECT")){
-                    toggleBtn.setText("DISCONNECT");
-                    toggleBtn.setEnabled(true);
+                if(!connectBtn.getText().toString().equals("DISCONNECT")){
+                    connectBtn.setText("DISCONNECT");
+                    connectBtn.setEnabled(true);
                 }
             } else if (BleManager.ACTION_GATT_DISCONNECTED.equals(action)) {
 //                mConnected = false;
@@ -332,9 +379,9 @@ public class MainActivity extends AppCompatActivity {
 //                invalidateOptionsMenu();
 //                clearUI();
                 Log.i("Receive Broadcast", "ACTION_GATT_DISCONNECTED");
-                if(!toggleBtn.getText().toString().equals("CONNECT")){
-                    toggleBtn.setText("CONNECT");
-                    toggleBtn.setEnabled(true);
+                if(!connectBtn.getText().toString().equals("CONNECT")){
+                    connectBtn.setText("CONNECT");
+                    connectBtn.setEnabled(true);
                     bleManager.infos.deleteAll();
                 }
                 bleManager.mGatt = null;
@@ -345,7 +392,8 @@ public class MainActivity extends AppCompatActivity {
                 Log.i("Receive Broadcast", "ACTION_GATT_SERVICES_DISCOVERED");
             } else if (BleManager.ACTION_DATA_AVAILABLE.equals(action)) {
                 //displayData(intent.getStringExtra(BleManager.EXTRA_DATA));
-                Log.i("BroadcastReceiver", intent.getStringExtra(BleManager.EXTRA_DATA));
+                //Log.i("BroadcastReceiver", intent.getStringExtra(BleManager.EXTRA_DATA));
+                Log.i("BroadcastReceiver", Arrays.toString(intent.getByteArrayExtra(BleManager.EXTRA_DATA)));
 
             }
         }

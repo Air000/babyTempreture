@@ -26,9 +26,12 @@ import android.util.Log;
 import android.os.Handler;
 import android.widget.Toast;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import static android.R.attr.action;
 import static android.R.attr.data;
@@ -36,6 +39,7 @@ import static android.R.attr.duration;
 import static android.content.ContentValues.TAG;
 import static android.icu.lang.UCharacter.GraphemeClusterBreak.L;
 import static android.icu.lang.UCharacter.GraphemeClusterBreak.T;
+import static android.view.View.Z;
 
 /**
  * Created by air on 17年5月15日.
@@ -97,11 +101,14 @@ public class BleManager {
         mLEScanner = mBluetoothAdapter.getBluetoothLeScanner();
         if (Build.VERSION.SDK_INT >= 21) {
             settings = new ScanSettings.Builder()
-                    .setScanMode(ScanSettings.CALLBACK_TYPE_FIRST_MATCH)
+                    .setScanMode(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                    //.setScanMode(ScanSettings.CALLBACK_TYPE_FIRST_MATCH)
                     .build();
             filters = new ArrayList<ScanFilter>();
-            //ScanFilter filter = new ScanFilter.Builder().setServiceUuid(ParcelUuid.fromString(CUSTOM_SERVICE_UUID.toString())).build();
+            //ScanFilter filter = new ScanFilter.Builder().setServiceUuid( new ParcelUuid(NRF_CUSTOM_SERVICE_UUID)).build();
             //ScanFilter filter = new ScanFilter.Builder().setDeviceName("AVNET Smart Thermometer").build();
+
+            //ScanFilter filter = new ScanFilter.Builder().setDeviceName(Pattern.compile("rbc_mesh #\\d*").pattern()).build();
             ScanFilter filter = new ScanFilter.Builder().setDeviceName("rbc_mesh #57055").build();
             filters.add(filter);
         }
@@ -127,8 +134,8 @@ public class BleManager {
                 mBluetoothAdapter.startLeScan(mLeScanCallback);
             } else {
                 Log.i(TAG, "mLEScanner.startScan");
-                mLEScanner.startScan(filters, settings, mScanCallback);
-                //mLEScanner.startScan(mScanCallback);
+                //mLEScanner.startScan(filters, settings, mScanCallback);
+                mLEScanner.startScan(mScanCallback);
             }
         } else {
             if (Build.VERSION.SDK_INT < 21) {
@@ -146,11 +153,14 @@ public class BleManager {
             Log.i("callbackType", String.valueOf(callbackType));
             Log.i("result", result.toString());
             btDevice = result.getDevice();
-            DeviceInfo device = new DeviceInfo(btDevice);
-            Log.i(TAG, infos.list+"");
-            if(!infos.list.contains(device))
-                infos.add(device);
-            connectToDevice(btDevice);
+            if(btDevice.getName()!=null && btDevice.getName().matches("rbc_mesh #\\d*")) {
+                DeviceInfo device = new DeviceInfo(btDevice);
+                Log.i(TAG, infos.list+"");
+                if(!infos.list.contains(device))
+                    infos.add(device);
+                connectToDevice(btDevice);
+            }
+
         }
 
         @Override
@@ -292,8 +302,9 @@ public class BleManager {
                                  final BluetoothGattCharacteristic characteristic) {
         final Intent intent = new Intent(action);
 
-        String data = characteristic.getStringValue(0);
-        Log.i("broadcastUpdate", data);
+        //String data = characteristic.getStringValue(0);
+        final byte[] data = characteristic.getValue();
+        Log.i("broadcastUpdate", Arrays.toString(data));
         intent.putExtra(EXTRA_DATA, data);
 //        if(characteristic!=null) {
 //            final byte[] data = characteristic.getValue();
