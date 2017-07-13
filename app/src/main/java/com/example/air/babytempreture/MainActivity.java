@@ -60,6 +60,7 @@ import com.example.air.babytempreture.databinding.ActivityMainBinding;
 import static android.content.ContentValues.TAG;
 import static android.graphics.Color.YELLOW;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -67,11 +68,13 @@ import java.util.List;
 public class MainActivity extends AppCompatActivity {
 
     private BleManager bleManager;
+    private boolean mReceiverTag = false;
 
     private Button connectBtn;
     private Button ledBtn;
     private TextView powerLevelTxt;
     private LinearLayout mainContainer;
+    private ArrayList<Button> controlBtns;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -108,7 +111,7 @@ public class MainActivity extends AppCompatActivity {
         connectBtn = (Button) findViewById(R.id.scan_btn);
         ledBtn = (Button) findViewById(R.id.led_on);
         powerLevelTxt = (TextView) findViewById(R.id.power_level);
-
+        controlBtns = new ArrayList<>();
 
         for (int j=0; j<3; j++) {
             LinearLayout linLayout = new LinearLayout(this);
@@ -124,11 +127,10 @@ public class MainActivity extends AppCompatActivity {
             for (int i = 0; i < 3; i++) {
                 LayoutParams lpView = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
 
-                final ToggleButton btn = new ToggleButton(this);
+                final Button btn = new Button(this);
+                //btn.setEnabled(false);
                 btn.setLayoutParams(lpView);
                 btn.setText("OFF");
-                btn.setTextOn("ON");
-                btn.setTextOff("OFF");
                 btn.setTextColor(getResources().getColor(R.color.white));
                 btn.setGravity(Gravity.CENTER);
                 btn.setId(j*3+i);
@@ -144,40 +146,29 @@ public class MainActivity extends AppCompatActivity {
                         break;
                 }
 
-//                btn.setOnClickListener(new View.OnClickListener(){
-//                    public void onClick(View v) {
-//                        Log.i("ledBtn onClick", "device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
-//                        //bleManager.sendCommand("device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
-//                        byte[] data=new byte[5];
-//                        data[0]=0x00;
-//                        data[1]=(byte)btn.getId();
-//                        data[2]=0x00;
-//                        data[3]=0x01;
-//                        data[4]=0x00;
-//
-//                        bleManager.sendCommand("device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
-//                    }
-//                });
-                btn.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-                    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                        Log.i("ledBtn onClick", "device: "+ btn.getId()+ ",color:" + btn.getBackground());
+                btn.setOnClickListener(new Button.OnClickListener() {
+                    public void onClick(View buttonView) {
+
                         //bleManager.sendCommand("device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
-                        byte[] data=new byte[5];
+                        byte[] data=new byte[6];
                         data[0]=0x00;
                         data[1]=(byte)btn.getId();
                         data[2]=0x00;
-                        if (isChecked) {
+                        data[3]=0x02;
+                        if (btn.getText().equals("ON")) {
                             // The toggle is enabled
-                            data[3]=0x01;
-                            data[4]=0x00;
-                        } else {
+                            data[4]=0x01;
+                            data[5]=0x00;
+                        } else if(btn.getText().equals("OFF")) {
                             // The toggle is disabled
-                            data[3]=0x00;
                             data[4]=0x00;
+                            data[5]=0x00;
                         }
+                        Log.i("ledBtn onClick", "device: "+ btn.getId()+ ",data:" + Arrays.toString(data));
                         bleManager.sendCommand(data);
                     }
                 });
+                controlBtns.add(btn);
                 linLayout.addView(btn,lpView);
             }
             mainContainer.addView(linLayout,linLayoutParam);
@@ -208,17 +199,22 @@ public class MainActivity extends AppCompatActivity {
 
         mayRequestLocation();
 
+        broadcastRegister();
+
+    }
+
+    protected void broadcastRegister() {
         IntentFilter intentFilter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
         intentFilter.addAction(BleManager.ACTION_DATA_AVAILABLE);
         intentFilter.addAction(BleManager.ACTION_GATT_CONNECTED);
         intentFilter.addAction(BleManager.ACTION_GATT_DISCONNECTED);
         intentFilter.addAction(BleManager.ACTION_GATT_SERVICES_DISCOVERED);
         intentFilter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
+        intentFilter.addAction(BleManager.ACTION_LESCAN_TIMEOUT);
 
         this.registerReceiver(mGattUpdateReceiver, intentFilter);
-
+        mReceiverTag = true;
     }
-
     @Override
     protected void onPause() {
         super.onPause();
@@ -226,20 +222,28 @@ public class MainActivity extends AppCompatActivity {
             bleManager.scanLeDevice(false);
         }
         this.unregisterReceiver(mGattUpdateReceiver);
+        mReceiverTag = false;
     }
 
     @Override
     protected void onStop() {
         super.onStop();
         Log.w(TAG, "App stopped");
-        if (bleManager.mGatt == null) {
-            return;
-        }
-        bleManager.mGatt.close();
-        bleManager.mGatt = null;
+//        if (bleManager.mGatt == null) {
+//            return;
+//        }
+//        bleManager.mGatt.close();
+//        bleManager.mGatt = null;
 
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Log.w(TAG, "app resumed");
+        broadcastRegister();
+
+    }
     @Override
     protected void onDestroy() {
         super.onDestroy();
@@ -369,6 +373,7 @@ public class MainActivity extends AppCompatActivity {
 //                updateConnectionState(R.string.connected);
 //                invalidateOptionsMenu();
                 Log.i("Receive Broadcast", "ACTION_GATT_CONNECTED");
+
                 if(!connectBtn.getText().toString().equals("DISCONNECT")){
                     connectBtn.setText("DISCONNECT");
                     connectBtn.setEnabled(true);
@@ -391,10 +396,33 @@ public class MainActivity extends AppCompatActivity {
                 //displayGattServices(mBluetoothLeService.getSupportedGattServices());
                 Log.i("Receive Broadcast", "ACTION_GATT_SERVICES_DISCOVERED");
             } else if (BleManager.ACTION_DATA_AVAILABLE.equals(action)) {
-                //displayData(intent.getStringExtra(BleManager.EXTRA_DATA));
-                //Log.i("BroadcastReceiver", intent.getStringExtra(BleManager.EXTRA_DATA));
+                byte[] echo = intent.getByteArrayExtra(BleManager.EXTRA_DATA);
+                byte cmdRep = echo[0];
+                byte opcode = echo[1];
+                byte result = echo[2];
+                byte deviceIdLow = echo[3];
+                //byte deviceIdHigh = echo[4];
+                Log.i("BroadcastReceiveraaa", Byte.toString(cmdRep)+Byte.toString(opcode)+Byte.toString(result));
+                if(cmdRep == 17 && opcode == 0x00 && result == -128) {
+
+                    if(controlBtns.get(deviceIdLow).getText().equals("ON")){
+                        Log.i("btn click", "OFF");
+                        controlBtns.get(deviceIdLow).setText("OFF");
+                    }else if(controlBtns.get(deviceIdLow).getText().equals("OFF")){
+                        Log.i("btn click", "ON");
+                        controlBtns.get(deviceIdLow).setText("ON");
+                    }
+                }
                 Log.i("BroadcastReceiver", Arrays.toString(intent.getByteArrayExtra(BleManager.EXTRA_DATA)));
 
+
+            } else if(BleManager.ACTION_LESCAN_TIMEOUT.equals(action)) {
+                if(!connectBtn.isEnabled()){
+                    connectBtn.setText("CONNECT");
+                    connectBtn.setEnabled(true);
+                }
+
+                Log.i("BroadcastReceiver", action);
             }
         }
     };

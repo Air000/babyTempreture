@@ -68,6 +68,8 @@ public class BleManager {
     private static final UUID NRF_CUSTOM_CHARATERISTIC_READ_WRITE_UUID  =UUID.fromString("2a1e0005-fd51-d882-8ba8-b98c0000cd1e");
     private static final UUID NRF_CLIENT_CHARACTERISTIC_CONFIG = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
 
+    public final static String ACTION_LESCAN_TIMEOUT =
+            "com.example.bluetooth.le.ACTION_LESCAN_TIMEOUT";
     public final static String ACTION_GATT_CONNECTED =
             "com.example.bluetooth.le.ACTION_GATT_CONNECTED";
     public final static String ACTION_GATT_DISCONNECTED =
@@ -101,8 +103,8 @@ public class BleManager {
         mLEScanner = mBluetoothAdapter.getBluetoothLeScanner();
         if (Build.VERSION.SDK_INT >= 21) {
             settings = new ScanSettings.Builder()
-                    .setScanMode(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-                    //.setScanMode(ScanSettings.CALLBACK_TYPE_FIRST_MATCH)
+                    //.setScanMode(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                    .setScanMode(ScanSettings.CALLBACK_TYPE_FIRST_MATCH)
                     .build();
             filters = new ArrayList<ScanFilter>();
             //ScanFilter filter = new ScanFilter.Builder().setServiceUuid( new ParcelUuid(NRF_CUSTOM_SERVICE_UUID)).build();
@@ -126,7 +128,7 @@ public class BleManager {
                     } else {
                         Log.i(TAG, "mHandler.postDelayed");
                         mLEScanner.stopScan(mScanCallback);
-
+                        broadcastUpdate(ACTION_LESCAN_TIMEOUT);
                     }
                 }
             }, SCAN_PERIOD);
@@ -135,7 +137,8 @@ public class BleManager {
             } else {
                 Log.i(TAG, "mLEScanner.startScan");
                 //mLEScanner.startScan(filters, settings, mScanCallback);
-                mLEScanner.startScan(mScanCallback);
+                mLEScanner.startScan(filters, settings, mScanCallback);
+                //mLEScanner.startScan(mScanCallback);
             }
         } else {
             if (Build.VERSION.SDK_INT < 21) {
