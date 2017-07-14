@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">BabyTempreture</string>
+    <string name="app_name1">BabyTempreture</string>
+    <string name="app_name2">LED Color Control</string>
 </resources>

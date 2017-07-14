@@ -49,6 +49,7 @@ import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.ListAdapter;
 import android.widget.ListView;
+import android.widget.RadioButton;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.os.Handler;
@@ -56,9 +57,12 @@ import android.view.ViewGroup.LayoutParams;
 import android.widget.ToggleButton;
 
 import com.example.air.babytempreture.databinding.ActivityMainBinding;
+import com.flask.colorpicker.ColorPickerView;
+import com.flask.colorpicker.OnColorSelectedListener;
 
 import static android.content.ContentValues.TAG;
 import static android.graphics.Color.YELLOW;
+import static android.graphics.Color.green;
 
 import java.lang.reflect.Array;
 import java.util.ArrayList;
@@ -68,13 +72,13 @@ import java.util.List;
 public class MainActivity extends AppCompatActivity {
 
     private BleManager bleManager;
-    private boolean mReceiverTag = false;
-
-    private Button connectBtn;
-    private Button ledBtn;
-    private TextView powerLevelTxt;
-    private LinearLayout mainContainer;
-    private ArrayList<Button> controlBtns;
+    private LedInfo currentCntrlLed;
+    private LedInfo led1 = new LedInfo((char)1);
+    private LedInfo led2 = new LedInfo((char)2);
+    private LedInfo led3 = new LedInfo((char)3);
+    private LedInfo led4 = new LedInfo((char)4);
+    private Button connectBtn, led1Btn, led2Btn, led3Btn, led4Btn;
+    private ColorPickerView colorPicker;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -107,73 +111,35 @@ public class MainActivity extends AppCompatActivity {
         bleManager.infos = new DevicesInfoList();
         binding.setInfos(bleManager.infos);
 
-        mainContainer = (LinearLayout) findViewById(R.id.main_container);
         connectBtn = (Button) findViewById(R.id.scan_btn);
-        ledBtn = (Button) findViewById(R.id.led_on);
-        powerLevelTxt = (TextView) findViewById(R.id.power_level);
-        controlBtns = new ArrayList<>();
+        led1Btn = (Button) findViewById(R.id.btnLed1);
+        led2Btn = (Button) findViewById(R.id.btnLed2);
+        led3Btn = (Button) findViewById(R.id.btnLed3);
+        led4Btn = (Button) findViewById(R.id.btnLed4);
+        currentCntrlLed = led1;
+        colorPicker = (ColorPickerView) findViewById(R.id.color_picker_view);
 
-        for (int j=0; j<3; j++) {
-            LinearLayout linLayout = new LinearLayout(this);
-            linLayout.setOrientation(LinearLayout.HORIZONTAL);
-            LinearLayout.LayoutParams linLayoutParam = new LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-            linLayoutParam.gravity=Gravity.CENTER;
-            linLayout.setPadding(0,30,0,0);
+        colorPicker.addOnColorSelectedListener(new OnColorSelectedListener() {
+            @Override
+            public void onColorSelected(int i) {
+                //if(!currentCntrlLed.isOn) return;
 
-            final TextView deviceIdText = new TextView(this);
-            deviceIdText.setText("No."+j+" ");
-            deviceIdText.setTextColor(getResources().getColor(R.color.soft_opaque));
-            linLayout.addView(deviceIdText);
-            for (int i = 0; i < 3; i++) {
-                LayoutParams lpView = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-
-                final Button btn = new Button(this);
-                //btn.setEnabled(false);
-                btn.setLayoutParams(lpView);
-                btn.setText("OFF");
-                btn.setTextColor(getResources().getColor(R.color.white));
-                btn.setGravity(Gravity.CENTER);
-                btn.setId(j*3+i);
-                switch (i) {
-                    case 0:
-                        btn.setBackgroundColor(getResources().getColor(R.color.red));
-                        break;
-                    case 1:
-                        btn.setBackgroundColor(getResources().getColor(R.color.mediumspringgreen));
-                        break;
-                    case 2:
-                        btn.setBackgroundColor(getResources().getColor(R.color.dodgerblue));
-                        break;
-                }
-
-                btn.setOnClickListener(new Button.OnClickListener() {
-                    public void onClick(View buttonView) {
-
-                        //bleManager.sendCommand("device: "+ btn.getId()+ ",color:" +btn.getBackground().toString());
-                        byte[] data=new byte[6];
-                        data[0]=0x00;
-                        data[1]=(byte)btn.getId();
-                        data[2]=0x00;
-                        data[3]=0x02;
-                        if (btn.getText().equals("ON")) {
-                            // The toggle is enabled
-                            data[4]=0x01;
-                            data[5]=0x00;
-                        } else if(btn.getText().equals("OFF")) {
-                            // The toggle is disabled
-                            data[4]=0x00;
-                            data[5]=0x00;
-                        }
-                        Log.i("ledBtn onClick", "device: "+ btn.getId()+ ",data:" + Arrays.toString(data));
-                        bleManager.sendCommand(data);
-                    }
-                });
-                controlBtns.add(btn);
-                linLayout.addView(btn,lpView);
+                char b = (char)(i&0xFF);
+                char g = (char)((i>>8)&0xFF);
+                char r = (char)((i>>16)&0xFF);
+                Log.i("onColorSelected", "currentLed: "+ (int)(currentCntrlLed.Id)+ " int: "+ Integer.toHexString(i)+" r:"+(int)(r)+" g:"+(int)(g)+" b:"+(int)(b));
+                byte[] data = new byte[7];
+                data[0] = 0x00;
+                data[1] = (byte)currentCntrlLed.Id;
+                data[2] = 0x00;
+                data[3] = 0x03;
+                data[4] = (byte)r;
+                data[5] = (byte)g;
+                data[6] = (byte)b;
+                bleManager.sendCommand(data);
+                currentCntrlLed.updateColor(r, g, b);
             }
-            mainContainer.addView(linLayout,linLayoutParam);
-        }
-
+        });
         connectBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 Log.i("button text", connectBtn.getText().toString());
@@ -188,14 +154,33 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        ledBtn.setOnClickListener(new View.OnClickListener() {
+        led1Btn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                Log.i("setOnClickListener", "lenOn");
-                bleManager.sendCommand("LED_ON");
+                Log.i("led1", "clicked");
+                ledClick(led1);
             }
         });
 
-        LayoutInflater inflater = LayoutInflater.from(this);
+        led2Btn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                Log.i("led2", "clicked");
+                ledClick(led2);
+            }
+        });
+
+        led3Btn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                Log.i("led3", "clicked");
+                ledClick(led3);
+            }
+        });
+
+        led4Btn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                Log.i("led4", "clicked");
+                ledClick(led4);
+            }
+        });
 
         mayRequestLocation();
 
@@ -203,6 +188,87 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    public void onRadioButtonClicked(View view) {
+
+        boolean checked = ((RadioButton) view).isChecked();
+
+        switch (view.getId()) {
+            case R.id.led1_pick_color:
+                if (checked){
+                    currentCntrlLed = led1;
+                }
+                break;
+            case R.id.led2_pick_color:
+                if (checked){
+                    currentCntrlLed = led2;
+                }
+                break;
+            case R.id.led3_pick_color:
+                if(checked){
+                    currentCntrlLed = led3;
+                }
+                break;
+            case R.id.led4_pick_color:
+                if(checked){
+                    currentCntrlLed = led4;
+                }
+                break;
+        }
+    }
+
+    private void ledClick(LedInfo led) {
+        if(led.isOn){
+            byte[] data = new byte[7];
+            data[0] = 0x00;
+            data[1] = (byte)led.Id;
+            data[2] = 0x00;
+            data[3] = 0x03;
+            data[4] = 0x00;
+            data[5] = 0x00;
+            data[6] = 0x00;
+            bleManager.sendCommand(data);
+            switch (led.Id){
+                case 0x01:
+                    led1Btn.setBackgroundColor(0x80000000 | led.Rgb);
+                    break;
+                case 0x02:
+                    led2Btn.setBackgroundColor(0x80000000 | led.Rgb);
+                    break;
+                case 0x03:
+                    led3Btn.setBackgroundColor(0x80000000 | led.Rgb);
+                    break;
+                case 0x04:
+                    led4Btn.setBackgroundColor(0x80000000 | led.Rgb);
+                    break;
+            }
+            led.isOn = false;
+        }else {
+            byte[] data = new byte[7];
+            data[0] = 0x00;
+            data[1] = (byte)led.Id;
+            data[2] = 0x00;
+            data[3] = 0x03;
+            data[4] = (byte)led.ColorR;
+            data[5] = (byte)led.ColorG;
+            data[6] = (byte)led.ColorB;
+            bleManager.sendCommand(data);
+            switch (led.Id){
+                case 0x01:
+                    led1Btn.setBackgroundColor(led.Rgb);
+                    break;
+                case 0x02:
+                    led2Btn.setBackgroundColor(led.Rgb);
+                    break;
+                case 0x03:
+                    led3Btn.setBackgroundColor(led.Rgb);
+                    break;
+                case 0x04:
+                    led4Btn.setBackgroundColor(led.Rgb);
+                    break;
+            }
+            led.isOn = true;
+        }
+    }
     protected void broadcastRegister() {
         IntentFilter intentFilter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
         intentFilter.addAction(BleManager.ACTION_DATA_AVAILABLE);
@@ -213,7 +279,6 @@ public class MainActivity extends AppCompatActivity {
         intentFilter.addAction(BleManager.ACTION_LESCAN_TIMEOUT);
 
         this.registerReceiver(mGattUpdateReceiver, intentFilter);
-        mReceiverTag = true;
     }
     @Override
     protected void onPause() {
@@ -222,7 +287,6 @@ public class MainActivity extends AppCompatActivity {
             bleManager.scanLeDevice(false);
         }
         this.unregisterReceiver(mGattUpdateReceiver);
-        mReceiverTag = false;
     }
 
     @Override
@@ -376,6 +440,7 @@ public class MainActivity extends AppCompatActivity {
 
                 if(!connectBtn.getText().toString().equals("DISCONNECT")){
                     connectBtn.setText("DISCONNECT");
+                    connectBtn.setBackgroundColor(getResources().getColor(R.color.grassgreen));
                     connectBtn.setEnabled(true);
                 }
             } else if (BleManager.ACTION_GATT_DISCONNECTED.equals(action)) {
@@ -386,6 +451,7 @@ public class MainActivity extends AppCompatActivity {
                 Log.i("Receive Broadcast", "ACTION_GATT_DISCONNECTED");
                 if(!connectBtn.getText().toString().equals("CONNECT")){
                     connectBtn.setText("CONNECT");
+                    connectBtn.setBackgroundResource(android.R.drawable.btn_default);
                     connectBtn.setEnabled(true);
                     bleManager.infos.deleteAll();
                 }
@@ -405,13 +471,13 @@ public class MainActivity extends AppCompatActivity {
                 Log.i("BroadcastReceiveraaa", Byte.toString(cmdRep)+Byte.toString(opcode)+Byte.toString(result));
                 if(cmdRep == 17 && opcode == 0x00 && result == -128) {
 
-                    if(controlBtns.get(deviceIdLow).getText().equals("ON")){
-                        Log.i("btn click", "OFF");
-                        controlBtns.get(deviceIdLow).setText("OFF");
-                    }else if(controlBtns.get(deviceIdLow).getText().equals("OFF")){
-                        Log.i("btn click", "ON");
-                        controlBtns.get(deviceIdLow).setText("ON");
-                    }
+//                    if(controlBtns.get(deviceIdLow).getText().equals("ON")){
+//                        Log.i("btn click", "OFF");
+//                        controlBtns.get(deviceIdLow).setText("OFF");
+//                    }else if(controlBtns.get(deviceIdLow).getText().equals("OFF")){
+//                        Log.i("btn click", "ON");
+//                        controlBtns.get(deviceIdLow).setText("ON");
+//                    }
                 }
                 Log.i("BroadcastReceiver", Arrays.toString(intent.getByteArrayExtra(BleManager.EXTRA_DATA)));
 
@@ -419,6 +485,7 @@ public class MainActivity extends AppCompatActivity {
             } else if(BleManager.ACTION_LESCAN_TIMEOUT.equals(action)) {
                 if(!connectBtn.isEnabled()){
                     connectBtn.setText("CONNECT");
+                    connectBtn.setBackgroundResource(android.R.drawable.btn_default);
                     connectBtn.setEnabled(true);
                 }
 

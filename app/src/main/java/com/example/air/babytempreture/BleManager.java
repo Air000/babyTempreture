@@ -112,7 +112,7 @@ public class BleManager {
 
             //ScanFilter filter = new ScanFilter.Builder().setDeviceName(Pattern.compile("rbc_mesh #\\d*").pattern()).build();
             ScanFilter filter = new ScanFilter.Builder().setDeviceName("rbc_mesh #57055").build();
-            filters.add(filter);
+            //filters.add(filter);
         }
 
 
